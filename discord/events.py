@@ -3,7 +3,12 @@ from discord.ext import commands
 
 from core.memory import get_guild_config, init_db, set_guild_config
 from core.scheduler import ensure_scheduler_started
-from .runtime import handle_message, safe_reply
+from discord.runtime import handle_message
+from helpers import discord as discord_helpers
+from helpers.log import get_logger
+
+
+LOGGER = get_logger(__name__)
 
 
 def register_events(bot: commands.Bot, default_guild_config: dict):
@@ -18,14 +23,12 @@ def register_events(bot: commands.Bot, default_guild_config: dict):
 
     @bot.event
     async def on_message(message: discord.Message):
-        if message.author.bot:
-            return
         if not message.guild:
             return
 
         ctx = await bot.get_context(message)
         try:
-            # Valid commands should be handled only by command handlers.
+            # valid commands should be handled only by command handlers
             if ctx.valid:
                 return
 
@@ -35,6 +38,11 @@ def register_events(bot: commands.Bot, default_guild_config: dict):
                 set_guild_config(guild_id)
                 config = get_guild_config(guild_id)
             config = config or default_guild_config
+
+            # check if we should ignore bot messages
+            ignore_bots = bool(config.get("ignore_bots", default_guild_config.get("ignore_bots", True)))
+            if message.author.bot and ignore_bots:
+                return
 
             bot_channel = config["bot_channel_id"]
             in_dedicated_channel = bot_channel and str(message.channel.id) == bot_channel
@@ -46,7 +54,7 @@ def register_events(bot: commands.Bot, default_guild_config: dict):
                 try:
                     await handle_message(bot, message, think_enabled=think_enabled)
                 except Exception as exc:
-                    print(f"Message handling error: {exc}")
-                    await safe_reply(message, "~~TRUCK-KUN~~ AN EXCEPTION HIT ME!!! HELP!!! ;;A;;")
+                    LOGGER.exception(f"Message handling error: {exc}")
+                    await discord_helpers.safe_reply(message, "~~TRUCK-KUN~~ AN EXCEPTION HIT ME!!! HELP!!! ;;A;;", LOGGER)
         finally:
             await bot.process_commands(message)

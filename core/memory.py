@@ -25,23 +25,16 @@ def init_db():
                 value TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-            CREATE TABLE IF NOT EXISTS logs (
-                id INTEGER PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                content TEXT NOT NULL,
-                logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
             CREATE TABLE IF NOT EXISTS guild_config (
                 guild_id TEXT PRIMARY KEY,
                 bot_channel_id TEXT,
                 think BOOLEAN DEFAULT FALSE,
-                log_ttl_days INTEGER DEFAULT 7
+                ignore_bots BOOLEAN DEFAULT TRUE
             );
             CREATE TABLE IF NOT EXISTS conversation_history (
                 id INTEGER PRIMARY KEY,
                 guild_id TEXT NOT NULL,
                 channel_id TEXT NOT NULL,
-                scope_key TEXT NOT NULL,
                 message_id TEXT NOT NULL,
                 reply_to_message_id TEXT,
                 author_id TEXT NOT NULL,
@@ -49,13 +42,10 @@ def init_db():
                 is_bot BOOLEAN NOT NULL DEFAULT FALSE,
                 content TEXT NOT NULL,
                 created_at TIMESTAMP NOT NULL,
-                compacted BOOLEAN DEFAULT FALSE,
                 UNIQUE(guild_id, message_id)
             );
-            CREATE INDEX IF NOT EXISTS idx_conversation_scope_recent
-            ON conversation_history (guild_id, scope_key, created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_conversation_scope_compacted
-            ON conversation_history (guild_id, scope_key, compacted, created_at ASC);
+            CREATE INDEX IF NOT EXISTS idx_conversation_channel_recent
+            ON conversation_history (guild_id, channel_id, created_at DESC);
         """)
 
 
@@ -190,19 +180,6 @@ def prune_memories(older_than_days: int = 14) -> dict:
     return {"users": len(user_ids), "pruned": total_pruned, "kept": total_kept}
 
 
-def add_log(user_id: str, content: str):
-    with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO logs (user_id, content) VALUES (?, ?)",
-            (user_id, content),
-        )
-
-
-def get_all_guild_configs() -> list[dict]:
-    with get_conn() as conn:
-        return [dict(r) for r in conn.execute("SELECT * FROM guild_config").fetchall()]
-
-
 def get_guild_config(guild_id: str) -> dict | None:
     with get_conn() as conn:
         row = conn.execute(
@@ -216,27 +193,27 @@ def set_guild_config(
     guild_id: str,
     bot_channel_id: str | None = None,
     think: bool | None = None,
-    log_ttl_days: int | None = None,
+    ignore_bots: bool | None = None,
 ):
     config = get_guild_config(guild_id)
     if config:
         bot_channel_id = bot_channel_id if bot_channel_id is not None else config["bot_channel_id"]
         think = think if think is not None else config["think"]
-        log_ttl_days = log_ttl_days if log_ttl_days is not None else config["log_ttl_days"]
+        ignore_bots = ignore_bots if ignore_bots is not None else config.get("ignore_bots", True)
         with get_conn() as conn:
             conn.execute(
-                "UPDATE guild_config SET bot_channel_id = ?, think = ?, log_ttl_days = ? WHERE guild_id = ?",
-                (bot_channel_id, think, log_ttl_days, guild_id),
+                "UPDATE guild_config SET bot_channel_id = ?, think = ?, ignore_bots = ? WHERE guild_id = ?",
+                (bot_channel_id, think, ignore_bots, guild_id),
             )
     else:
         with get_conn() as conn:
             conn.execute(
-                "INSERT INTO guild_config (guild_id, bot_channel_id, think, log_ttl_days) VALUES (?, ?, ?, ?)",
+                "INSERT INTO guild_config (guild_id, bot_channel_id, think, ignore_bots) VALUES (?, ?, ?, ?)",
                 (
                     guild_id,
                     bot_channel_id,
                     think if think is not None else False,
-                    log_ttl_days if log_ttl_days is not None else 7,
+                    ignore_bots if ignore_bots is not None else True,
                 ),
             )
 
@@ -244,7 +221,6 @@ def set_guild_config(
 def insert_discord_message(
     guild_id: str,
     channel_id: str,
-    scope_key: str,
     message_id: str,
     reply_to_message_id: str | None,
     author_id: str,
@@ -257,16 +233,15 @@ def insert_discord_message(
         conn.execute(
             """
             INSERT INTO conversation_history (
-                guild_id, channel_id, scope_key, message_id, reply_to_message_id,
+                guild_id, channel_id, message_id, reply_to_message_id,
                 author_id, author_name, is_bot, content, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(guild_id, message_id) DO NOTHING
             """,
             (
                 guild_id,
                 channel_id,
-                scope_key,
                 message_id,
                 reply_to_message_id,
                 author_id,
@@ -278,136 +253,18 @@ def insert_discord_message(
         )
 
 
-def get_discord_message_scope(guild_id: str, message_id: str) -> str | None:
-    with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT scope_key
-            FROM conversation_history
-            WHERE guild_id = ? AND message_id = ?
-            """,
-            (guild_id, message_id),
-        ).fetchone()
-    return row["scope_key"] if row else None
-
-
-def get_scope_recent_messages(guild_id: str, scope_key: str, limit: int = 10) -> list[dict]:
+def get_channel_recent_messages(guild_id: str, channel_id: str, limit: int = 10) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
             """
             SELECT *
             FROM conversation_history
-            WHERE guild_id = ? AND scope_key = ? AND compacted = FALSE
+            WHERE guild_id = ? AND channel_id = ?
             ORDER BY created_at DESC, id DESC
             LIMIT ?
             """,
-            (guild_id, scope_key, limit),
+            (guild_id, channel_id, limit),
         ).fetchall()
     return [dict(r) for r in reversed(rows)]
 
 
-def get_uncompacted_scope_count(guild_id: str, scope_key: str) -> int:
-    with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM conversation_history
-            WHERE guild_id = ? AND scope_key = ? AND compacted = FALSE
-            """,
-            (guild_id, scope_key),
-        ).fetchone()
-    return int(row["count"]) if row else 0
-
-
-def get_uncompacted_scope_batch(guild_id: str, scope_key: str, batch_size: int = 20) -> list[dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT *
-            FROM conversation_history
-            WHERE guild_id = ? AND scope_key = ? AND compacted = FALSE
-            ORDER BY created_at ASC, id ASC
-            LIMIT ?
-            """,
-            (guild_id, scope_key, batch_size),
-        ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def mark_scope_messages_compacted(ids: list[int]):
-    if not ids:
-        return
-    placeholders = ",".join("?" for _ in ids)
-    with get_conn() as conn:
-        conn.execute(
-            f"UPDATE conversation_history SET compacted = TRUE WHERE id IN ({placeholders})",
-            ids,
-        )
-
-
-def get_scope_logs(guild_id: str, scope_key: str, limit: int = 3) -> list[str]:
-    scope_user_id = f"discord_scope:{guild_id}:{scope_key}"
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT content
-            FROM logs
-            WHERE user_id = ?
-            ORDER BY logged_at DESC, id DESC
-            LIMIT ?
-            """,
-            (scope_user_id, limit),
-        ).fetchall()
-    return [r["content"] for r in reversed(rows)]
-
-
-def get_recent_logs(hours: int = 24, limit: int = 20) -> list[dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT user_id, content, logged_at
-            FROM logs
-            WHERE logged_at >= datetime('now', ?)
-            ORDER BY logged_at DESC, id DESC
-            LIMIT ?
-            """,
-            (f"-{hours} hours", limit),
-        ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def delete_old_logs(hours: int = 24) -> int:
-    with get_conn() as conn:
-        cursor = conn.execute(
-            """
-            DELETE FROM logs
-            WHERE logged_at < datetime('now', ?)
-            """,
-            (f"-{hours} hours",),
-        )
-    return int(cursor.rowcount or 0)
-
-
-def delete_old_compacted_messages(hours: int = 24) -> int:
-    with get_conn() as conn:
-        cursor = conn.execute(
-            """
-            DELETE FROM conversation_history
-            WHERE compacted = TRUE
-            AND created_at < datetime('now', ?)
-            """,
-            (f"-{hours} hours",),
-        )
-    return int(cursor.rowcount or 0)
-
-
-def delete_old_discord_messages(guild_id: str, ttl_days: int):
-    with get_conn() as conn:
-        conn.execute(
-            """
-            DELETE FROM conversation_history
-            WHERE guild_id = ?
-            AND created_at < datetime('now', ?)
-            """,
-            (guild_id, f"-{ttl_days} days"),
-        )

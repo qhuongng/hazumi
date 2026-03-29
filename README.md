@@ -1,10 +1,10 @@
-# Discord bot with Ollama SDK
+# Discord bot with OpenAI API compatible LLM integration
 
 WIP. This README will be updated with more details later.
 
 ## How to run
 
-Prerequisites: Python (3.10+) and Ollama installed.
+Prerequisites: Python (3.10+) and an LLM served with OpenAI API.
 
 Create a virtual Python environment:
 

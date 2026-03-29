@@ -1,0 +1,7 @@
+{
+  "logging": {
+    "tool_use": false,
+    "messages": false,
+    "prompt": false
+  }
+}

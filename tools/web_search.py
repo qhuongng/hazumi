@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from html import unescape
 import re
 
@@ -7,6 +8,7 @@ from ddgs import DDGS
 
 
 def _search_sync(query: str, max_results: int = 5) -> list[dict]:
+    # default to all results without time filter - we'll score recency in ranking
     return DDGS().text(query=query, max_results=max_results)
 
 
@@ -60,19 +62,64 @@ def _snippet_quality_penalty(snippet: str) -> float:
     return 0.0
 
 
+def _extract_recency_score(text: str) -> float:
+    """
+    Calculate recency score based on time indicators in the text.
+    Focuses on a 6-month recency window for time-sensitive queries.
+    Returns a value between -0.05 (old content) and 0.1 (very recent).
+    """
+    lowered = text.lower()
+    now = datetime.now()
+    current_year = now.year
+    current_month = now.month
+
+    # check for explicit recency terms (strongest signal)
+    high_recency_terms = ("today", "yesterday", "breaking", "just released", "just announced", "hours ago")
+    medium_recency_terms = ("this week", "last week", "this month", "recently", "latest", "new", "now")
+
+    if any(term in lowered for term in high_recency_terms):
+        return 0.10
+    if any(term in lowered for term in medium_recency_terms):
+        return 0.07
+
+    # check for year/month mentions within 6-month window
+    for month_offset in range(6):
+        # calculate target year and month
+        target_month = current_month - month_offset
+        target_year = current_year
+        if target_month <= 0:
+            target_month += 12
+            target_year -= 1
+
+        year_str = str(target_year)
+        if year_str in lowered:
+            # decaying score: current year = 0.08, older months get progressively less
+            return 0.08 - (month_offset * 0.015)
+
+    # penalize clearly old content (mentions years older than 6 months)
+    old_year_threshold = current_year if current_month > 6 else current_year - 1
+    for old_year in range(old_year_threshold - 2, old_year_threshold):
+        if str(old_year) in lowered:
+            return -0.03
+
+    return 0.0
+
+
 def _score_result(query: str, item: dict) -> float:
     query_tokens = _tokenize(query)
     title = str(item.get("title") or "")
     snippet = str(item.get("body") or item.get("snippet") or "")
     url = str(item.get("href") or item.get("url") or "")
+    combined_text = title + " " + snippet
 
     title_overlap = _overlap_score(query_tokens, title)
     snippet_overlap = _overlap_score(query_tokens, snippet)
-    phrase_bonus = 0.1 if query.lower() in (title + " " + snippet).lower() else 0.0
+    phrase_bonus = 0.1 if query.lower() in combined_text.lower() else 0.0
     domain_bonus = _domain_prior(url)
     quality_penalty = _snippet_quality_penalty(snippet)
+    recency_score = _extract_recency_score(combined_text)
 
-    score = (0.48 * title_overlap) + (0.30 * snippet_overlap) + phrase_bonus + domain_bonus - quality_penalty
+    score = (0.45 * title_overlap) + (0.28 * snippet_overlap) + phrase_bonus + domain_bonus + recency_score - quality_penalty
     return max(0.0, min(1.0, score))
 
 
