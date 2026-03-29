@@ -28,7 +28,7 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-Remove `.example` from `.env.example` and `prompts/SOUL.md.example` and customize the values and content to your liking. 
+Remove `.example` from `.env.example` and `constants/prompts/SOUL.md.example` and customize the values and content to your liking. 
 
 Run the bot:
 

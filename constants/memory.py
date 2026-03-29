@@ -1,0 +1,15 @@
+DURABLE_MEMORY_MARKERS = (
+    "allerg",
+    "medical",
+    "diagnos",
+    "cannot",
+    "can't",
+    "do not",
+    "don't",
+    "pronoun",
+    "name is",
+    "birthday",
+    "partner",
+    "spouse",
+    "boundary",
+)

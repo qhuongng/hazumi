@@ -1,4 +1,5 @@
 def split_message_chunks(text: str, max_len: int = 1990) -> list[str]:
+    """Split text into chunks that are at most max_len characters, trying to split on word boundaries."""
     chunks: list[str] = []
     words = text.split()
 
