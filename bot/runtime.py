@@ -64,6 +64,10 @@ async def _build_reply_thread_history(bot: discord.Client, message: discord.Mess
             chain.append(parent)
         current = parent
 
+    # cap reply-chain length to the most recent 6 parents
+    if len(chain) > 6:
+        chain = chain[:6]
+
     chain.reverse()
 
     history: list[dict] = []
@@ -161,7 +165,7 @@ async def build_custom_history(
         context_note = (
             f"{context_note}\n\n"
             "## Latest Discord messages\n\n"
-            "These are the most recent messages in the conversation. You should use them to have a rough idea of the context, but don't reply to them directly.\n\n"
+            "These are the most recent messages in the conversation. You should use them to have a rough idea of the conversation topic and flow, but don't reply to them directly.\n\n"
             "Format: msg_id id (reply to id) - username: message\n\n",
             "CRITICAL: Do not let 'username: ' leak into your response, it's only part of the context formatting.\n\n",
             f"{context_rows}"
@@ -171,14 +175,12 @@ async def build_custom_history(
 
 
 async def handle_message(bot: discord.Client, message: discord.Message, think_enabled: bool = False):
-    """Main discord message pipeline: scope, history, model call, reply, then compaction check."""
+    """Main discord message pipeline: scope, history, model call, reply."""
 
     user_id = str(message.author.id)
     user_name = message.author.display_name
-    guild_id = str(message.guild.id)
-    scope_key = await resolve_scope_key(bot, message)
 
-    await cache_recent_channel_window(bot, message, scope_key)
+    await cache_recent_channel_window(bot, message)
 
     text = message.content.replace(f"<@{bot.user.id}>", "").strip()
     if not text:
@@ -188,7 +190,7 @@ async def handle_message(bot: discord.Client, message: discord.Message, think_en
     should_mention_author = False
 
     if message.reference and message.reference.message_id:
-        # only mention author automatically in bot-thread reply flows.
+        # only mention author automatically in bot-thread reply flows
         parent_message = message.reference.resolved
         
         if parent_message is None:

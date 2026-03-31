@@ -66,10 +66,10 @@ def register_commands(bot: commands.Bot, default_guild_config: dict):
         channel_text = f"<#{channel_id}> (`{channel_id}`)" if channel_id else "Not set"
 
         await ctx.reply(
-            "Guild config:\n"
-            f"- bot_channel_id: {channel_text}\n"
-            f"- think: {config.get('think', default_guild_config['think'])}\n"
-            f"- ignore_bots: {config.get('ignore_bots', default_guild_config['ignore_bots'])}"
+            "current config for this server:\n"
+            f"- bot_channel_id: {channel_text} (!setchannel [#channel|id|name|0] to change)\n"
+            f"- think: {config.get('think', default_guild_config['think'])} (!think <on|off> to change)\n"
+            f"- ignore_bots: {config.get('ignore_bots', default_guild_config['ignore_bots'])} (!ignorebot <on|off> to change)"
         )
 
     @set_bot_channel_command.error
@@ -92,9 +92,9 @@ def register_commands(bot: commands.Bot, default_guild_config: dict):
     async def help_command(ctx: commands.Context):
         await ctx.reply(
             "available commands:\n"
-            "- `!setchannel [#channel|id|name|0]` set dedicated bot channel (`0` clears it)\n"
-            "- `!think <on|off>` toggle think mode\n"
-            "- `!ignorebot <on|off>` toggle whether to ignore other bots (default: on)\n"
+            "- `!setchannel [#channel|id|name|0]` set dedicated channel for me so u don't have to @mention me every time u wanna yap (`0` clears it)\n"
+            "- `!think <on|off>` turn my brain on or off\n"
+            "- `!ignorebot <on|off>` toggle whether u want me to ghost other bots\n"
             "- `!config` show current guild config\n"
-            "notes: config-changing commands require `Manage Server`"
+            "notes: config-changing commands require `Manage Server` permission"
         )

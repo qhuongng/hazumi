@@ -8,7 +8,10 @@ async def remember(
 ) -> str:
     """
     Remember a piece of information for the user.
+
     The content should be a concise fact or detail that can be recalled later.
+
+    Use when the user mentions durable facts about themselves, or teaches you something new that they want you to remember for future conversations.
     """
     normalized_content = content.strip()
     if not normalized_content:

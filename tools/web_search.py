@@ -1,14 +1,13 @@
 import asyncio
-from datetime import datetime
-from html import unescape
 import re
-
 import httpx
+import trafilatura
+
 from ddgs import DDGS
 
 
+
 def _search_sync(query: str, max_results: int = 5) -> list[dict]:
-    # default to all results without time filter - we'll score recency in ranking
     return DDGS().text(query=query, max_results=max_results)
 
 
@@ -35,73 +34,15 @@ def _domain_prior(url: str) -> float:
     lowered = (url or "").lower()
     if not lowered:
         return 0.0
-
     trust_boost = (
-        ".gov", ".edu", "wikipedia.org", "britannica.com", "reuters.com", "apnews.com", "who.int", "nih.gov",
-        "docs.", "developer.", "github.com",
+        ".gov", ".edu", "wikipedia.org", "britannica.com", "reuters.com",
+        "apnews.com", "who.int", "nih.gov", "docs.", "developer.", "github.com",
     )
     low_signal = ("fandom.com", "pinterest.", "quora.com")
-
     if any(t in lowered for t in trust_boost):
         return 0.12
     if any(t in lowered for t in low_signal):
         return -0.06
-    return 0.0
-
-
-def _snippet_quality_penalty(snippet: str) -> float:
-    if not snippet:
-        return 0.1
-    s = _normalize_snippet(snippet)
-    if len(s) < 40:
-        return 0.08
-    # penalize obvious keyword stuffing / low readability.
-    unique_ratio = len(set(s.lower().split())) / max(len(s.split()), 1)
-    if unique_ratio < 0.35:
-        return 0.06
-    return 0.0
-
-
-def _extract_recency_score(text: str) -> float:
-    """
-    Calculate recency score based on time indicators in the text.
-    Focuses on a 6-month recency window for time-sensitive queries.
-    Returns a value between -0.05 (old content) and 0.1 (very recent).
-    """
-    lowered = text.lower()
-    now = datetime.now()
-    current_year = now.year
-    current_month = now.month
-
-    # check for explicit recency terms (strongest signal)
-    high_recency_terms = ("today", "yesterday", "breaking", "just released", "just announced", "hours ago")
-    medium_recency_terms = ("this week", "last week", "this month", "recently", "latest", "new", "now")
-
-    if any(term in lowered for term in high_recency_terms):
-        return 0.10
-    if any(term in lowered for term in medium_recency_terms):
-        return 0.07
-
-    # check for year/month mentions within 6-month window
-    for month_offset in range(6):
-        # calculate target year and month
-        target_month = current_month - month_offset
-        target_year = current_year
-        if target_month <= 0:
-            target_month += 12
-            target_year -= 1
-
-        year_str = str(target_year)
-        if year_str in lowered:
-            # decaying score: current year = 0.08, older months get progressively less
-            return 0.08 - (month_offset * 0.015)
-
-    # penalize clearly old content (mentions years older than 6 months)
-    old_year_threshold = current_year if current_month > 6 else current_year - 1
-    for old_year in range(old_year_threshold - 2, old_year_threshold):
-        if str(old_year) in lowered:
-            return -0.03
-
     return 0.0
 
 
@@ -116,19 +57,9 @@ def _score_result(query: str, item: dict) -> float:
     snippet_overlap = _overlap_score(query_tokens, snippet)
     phrase_bonus = 0.1 if query.lower() in combined_text.lower() else 0.0
     domain_bonus = _domain_prior(url)
-    quality_penalty = _snippet_quality_penalty(snippet)
-    recency_score = _extract_recency_score(combined_text)
 
-    score = (0.45 * title_overlap) + (0.28 * snippet_overlap) + phrase_bonus + domain_bonus + recency_score - quality_penalty
+    score = (0.45 * title_overlap) + (0.28 * snippet_overlap) + phrase_bonus + domain_bonus
     return max(0.0, min(1.0, score))
-
-
-def _confidence_label(score: float) -> str:
-    if score >= 0.75:
-        return "high"
-    if score >= 0.5:
-        return "medium"
-    return "low"
 
 
 def _rank_results(query: str, results: list[dict]) -> list[dict]:
@@ -142,129 +73,76 @@ def _rank_results(query: str, results: list[dict]) -> list[dict]:
     return ranked
 
 
-def _normalize_snippet(text: str) -> str:
-    cleaned = " ".join(text.split())
-    cleaned = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", cleaned)
-    cleaned = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", cleaned)
-    cleaned = re.sub(r"([A-Za-z])'s(?=[a-z])", r"\1's ", cleaned)
-    cleaned = re.sub(
-        r"(?<=[a-z])(was|is|are|were|born|age|with|from|into|onto|over|under|about|after|before|during)\b",
-        r" \1",
-        cleaned,
-    )
-    return " ".join(cleaned.split())
-
-
-def _extract_text_from_html(html: str) -> str:
-    text = re.sub(r"<script\b[^>]*>.*?</script>", " ", html, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r"<style\b[^>]*>.*?</style>", " ", text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r"<noscript\b[^>]*>.*?</noscript>", " ", text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r"<!--.*?-->", " ", text, flags=re.DOTALL)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = unescape(text)
-    text = _normalize_snippet(text)
-    return text
-
-
-def _best_excerpt(text: str, query: str, max_chars: int = 700) -> str:
-    if not text:
-        return ""
-
-    query_tokens = _tokenize(query)
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    scored: list[tuple[float, str]] = []
-    for s in sentences:
-        if len(s) < 30:
-            continue
-        overlap = _overlap_score(query_tokens, s)
-        scored.append((overlap, s))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    picked = [s for _, s in scored[:3]]
-    if not picked:
-        picked = [text[:max_chars]]
-
-    excerpt = " ".join(picked)
-    if len(excerpt) > max_chars:
-        excerpt = excerpt[: max_chars - 3].rstrip() + "..."
-    return excerpt
-
-
-async def _fetch_top_result_excerpt(url: str, query: str) -> str:
+async def _fetch_with_trafilatura(url: str) -> str:
+    """Fetch a URL and extract clean text using trafilatura."""
     if not url:
         return ""
-
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
-            response = await client.get(url)
+            response = await client.get(url, headers={
+                "User-Agent": "Mozilla/5.0 (compatible; HazumiBot/1.0)"
+            })
             response.raise_for_status()
             content_type = (response.headers.get("content-type") or "").lower()
             if "html" not in content_type and "text" not in content_type:
                 return ""
-            raw_text = _extract_text_from_html(response.text)
-            return _best_excerpt(raw_text, query=query)
+            # trafilatura works on raw html strings
+            extracted = trafilatura.extract(
+                response.text,
+                include_comments=False,
+                include_tables=False,
+                no_fallback=False,
+            )
+            if not extracted:
+                return ""
+            # truncate to keep context reasonable (~500-700 tokens)
+            return extracted[:2500]
     except Exception:
         return ""
 
 
-def _to_markdown(results: list[dict]) -> str:
-    if not results:
-        return "No relevant web results found."
-
-    lines = []
-    for idx, item in enumerate(results, start=1):
-        title = (item.get("title") or "Untitled").strip()
-        url = (item.get("href") or item.get("url") or "").strip()
-        snippet = _normalize_snippet((item.get("body") or item.get("snippet") or "").strip())
-        score = float(item.get("_score") or 0.0)
-        confidence = _confidence_label(score)
-
-        if url:
-            line = f"{idx}. [{title}]({url})"
-        else:
-            line = f"{idx}. {title}"
-        line += f" (score: {score:.2f}, confidence: {confidence})"
-
-        if snippet:
-            line += f"\n   - {snippet}"
-
-        lines.append(line)
-
-    return "\n".join(lines)
-
-
 async def web_search(query: str, max_results: int = 5) -> str:
-    """Run a lightweight web text search and return markdown-formatted results."""
+    """Run a web search, rank results, fetch and extract content from top 3.
+    
+    Use when the user query indicates they want up-to-date, time-sensitive information, or they asked about something you're unsure about.
+    """
 
     normalized_query = (query or "").strip()
     if not normalized_query:
         return "Please provide a non-empty search query."
 
-    normalized_max = max(1, min(int(max_results or 5), 8))
+    normalized_max = max(3, min(int(max_results or 5), 8))
 
     try:
         results = await asyncio.to_thread(_search_sync, normalized_query, normalized_max)
     except Exception as exc:
         return f"Web search failed: {exc}"
 
+    if not results:
+        return "No results found."
+
     ranked = _rank_results(normalized_query, results)
-    top = ranked[0] if ranked else {}
-    top_title = (top.get("title") or "Untitled").strip()
-    top_url = (top.get("href") or top.get("url") or "").strip()
-    top_score = float(top.get("_score") or 0.0)
-    top_conf = _confidence_label(top_score)
-    excerpt = await _fetch_top_result_excerpt(top_url, normalized_query)
+    top3 = ranked[:3]
+
+    # fetch all 3 concurrently
+    urls = [(item.get("href") or item.get("url") or "").strip() for item in top3]
+    excerpts = await asyncio.gather(*[_fetch_with_trafilatura(url) for url in urls])
 
     sections = []
-    if top_url:
-        sections.append(
-            "Top result:\n"
-            f"- [{top_title}]({top_url})\n"
-            f"- score: {top_score:.2f} ({top_conf} confidence)"
-        )
-    if excerpt:
-        sections.append(f"Top result excerpt:\n- {excerpt}")
+    for idx, (item, excerpt) in enumerate(zip(top3, excerpts), start=1):
+        title = (item.get("title") or "Untitled").strip()
+        url = urls[idx - 1]
+        snippet = (item.get("body") or item.get("snippet") or "").strip()
 
-    sections.append("Ranked results:\n" + _to_markdown(ranked))
+        block = f"### Result {idx}: {title}"
+        if url:
+            block += f"\nURL: {url}"
+        if excerpt:
+            block += f"\n\n{excerpt}"
+        elif snippet:
+            # fallback to ddgs snippet if fetch failed
+            block += f"\n\n{snippet}"
 
-    return "\n\n".join(sections)
+        sections.append(block)
+
+    return "\n\n---\n\n".join(sections)

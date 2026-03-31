@@ -1,4 +1,3 @@
-"""Discord utility functions."""
 import discord
 
 

@@ -1,9 +1,10 @@
 import discord
 from discord.ext import commands
 
+from bot.runtime import handle_message
+from constants.llm import FALLBACK_REPLY
 from core.memory import get_guild_config, init_db, set_guild_config
 from core.scheduler import ensure_scheduler_started
-from discord.runtime import handle_message
 from helpers import discord as discord_helpers
 from helpers.log import get_logger
 
@@ -15,7 +16,6 @@ def register_events(bot: commands.Bot, default_guild_config: dict):
     @bot.event
     async def on_ready():
         try:
-            init_db()
             ensure_scheduler_started()
             print(f"{bot.user} woke up and is ready to roll! >:3")
         except Exception as exc:
@@ -39,9 +39,9 @@ def register_events(bot: commands.Bot, default_guild_config: dict):
                 config = get_guild_config(guild_id)
             config = config or default_guild_config
 
-            # check if we should ignore bot messages
+            # check if we should ignore bot messages, however the bot must always ignore its own messages to prevent loops
             ignore_bots = bool(config.get("ignore_bots", default_guild_config.get("ignore_bots", True)))
-            if message.author.bot and ignore_bots:
+            if (message.author.bot and ignore_bots) or message.author == bot.user:
                 return
 
             bot_channel = config["bot_channel_id"]
@@ -55,6 +55,6 @@ def register_events(bot: commands.Bot, default_guild_config: dict):
                     await handle_message(bot, message, think_enabled=think_enabled)
                 except Exception as exc:
                     LOGGER.exception(f"Message handling error: {exc}")
-                    await discord_helpers.safe_reply(message, "~~TRUCK-KUN~~ AN EXCEPTION HIT ME!!! HELP!!! ;;A;;", LOGGER)
+                    await discord_helpers.safe_reply(message, FALLBACK_REPLY, LOGGER)
         finally:
             await bot.process_commands(message)

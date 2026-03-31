@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +60,9 @@ def _apply_levels(debug: bool):
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("apscheduler").setLevel(logging.WARNING)
+
+    # reduce verbosity from discord.py
+    logging.getLogger('discord').setLevel(logging.WARNING)
 
     # app logs are only verbose when DEBUG_MODE is enabled
     app_level = logging.DEBUG if debug else logging.WARNING
@@ -147,16 +151,3 @@ def log_prompt(logger: logging.Logger, system_prompt: str, context_note: str = "
         output += f"\n\n[DISCORD CONTEXT]{separator}{context_note}"
 
     logger.debug(output)
-
-
-def log_debug_json(logger: logging.Logger, event: str, payload: Any):
-    """Legacy debug JSON logger - logs if DEBUG_MODE is enabled."""
-    if not debug_enabled():
-        return
-
-    try:
-        body = json.dumps(payload, ensure_ascii=False, default=str)
-    except Exception as exc:
-        body = f"<failed to serialize payload: {exc}>"
-
-    logger.debug("%s %s", event, body)

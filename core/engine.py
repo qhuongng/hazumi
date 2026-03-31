@@ -6,7 +6,6 @@ import re
 from constants.llm import (
     LLM_MODEL,
     LLM_API_CHAT_URL,
-    LLM_TEMPERATURE,
     LLM_THINKING_PARAM_NAME,
     LLM_READ_TIMEOUT_SECONDS,
     MAX_TOOL_ROUNDS,
@@ -14,7 +13,7 @@ from constants.llm import (
 )
 from core.context import build_system_prompt
 from helpers import http as http_helpers
-from helpers.log import get_logger, log_messages, log_prompt, log_tool_use
+from helpers.log import get_logger, log_messages, log_tool_use
 
 
 LOGGER = get_logger(__name__)
@@ -37,7 +36,6 @@ def _log_llm_exception(prefix: str, exc: Exception):
 def _build_common_llm_fields() -> dict:
     return {
         "stream": False,
-        "temperature": LLM_TEMPERATURE,
     }
 
 
@@ -162,12 +160,12 @@ async def process_message_with_history(
         LOGGER.exception("Context load error: %s", exc)
         system = "You are a helpful assistant."
 
-    if context_note:
-        system = f"{system}\n\n# Discord context\n\n{context_note}"
-
-    log_prompt(LOGGER, system, context_note)
+    # discord context is a user message after the system message
+    # log_prompt(LOGGER, system, context_note)
 
     normalized_text = _normalize_for_dedupe(text)
+    if thinking_enabled is False:
+        normalized_text = "/no_think " + normalized_text
     filtered_history = list(history or [])
     if filtered_history:
         last = filtered_history[-1]
@@ -178,6 +176,8 @@ async def process_message_with_history(
             filtered_history = filtered_history[:-1]
 
     messages = [{"role": "system", "content": system}]
+    if context_note:
+        messages.append({"role": "user", "content": f"# Discord context\n\n{context_note}"})
     messages += [
         {"role": m["role"], "content": str(m["content"])}
         for m in filtered_history
@@ -273,7 +273,6 @@ async def process_message_with_history(
                     response.raise_for_status()
 
                 data = response.json()
-                log_debug_json(LOGGER, "[llm.chat.response]", data)
         except Exception as exc:
             _log_llm_exception("Model call error", exc)
             final_text = final_text or FALLBACK_REPLY
