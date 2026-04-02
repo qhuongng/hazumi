@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 
 from bot.runtime import handle_message
-from constants.llm import FALLBACK_REPLY
+from constants.config.llm import FALLBACK_REPLY
 from core.memory import get_guild_config, init_db, set_guild_config
 from core.scheduler import ensure_scheduler_started
 from helpers import discord as discord_helpers

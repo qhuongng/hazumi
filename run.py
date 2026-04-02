@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from constants.discord import DEFAULT_GUILD_CONFIG, DISCORD_COMMAND_PREFIX
+from constants.config.discord import DEFAULT_GUILD_CONFIG, DISCORD_COMMAND_PREFIX
 from bot.commands import register_commands
 from bot.events import register_events
 from helpers.log import get_logger

@@ -1,6 +1,6 @@
 import httpx
 
-from constants.llm import (
+from constants.config.llm import (
     LLM_CONNECT_TIMEOUT_SECONDS,
     LLM_READ_TIMEOUT_SECONDS,
     LLM_WRITE_TIMEOUT_SECONDS,

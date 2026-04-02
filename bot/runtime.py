@@ -1,6 +1,6 @@
 import discord
 
-from constants.discord import CHANNEL_WINDOW_SIZE, DISCORD_MESSAGE_CHUNK_SIZE, DISCORD_MESSAGE_MAX_LENGTH
+from constants.config.discord import CHANNEL_WINDOW_SIZE, DISCORD_MESSAGE_CHUNK_SIZE, DISCORD_MESSAGE_MAX_LENGTH
 from core.memory import insert_discord_message
 from core.engine import process_message_with_history
 from helpers import discord as discord_helpers

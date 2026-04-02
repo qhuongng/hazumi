@@ -3,7 +3,7 @@ import json
 import inspect
 import re
 
-from constants.llm import (
+from constants.config.llm import (
     LLM_MODEL,
     LLM_API_CHAT_URL,
     LLM_THINKING_PARAM_NAME,
