@@ -1,14 +1,101 @@
 import asyncio
 import re
+import logging
 import httpx
 import trafilatura
+from datetime import datetime
 
 from ddgs import DDGS
 
 
+logging.getLogger("trafilatura").setLevel(logging.ERROR)
 
-def _search_sync(query: str, max_results: int = 5) -> list[dict]:
-    return DDGS().text(query=query, max_results=max_results)
+
+
+def _normalize_search_mode(search_mode: str | None) -> str:
+    mode = str(search_mode or "relevant").strip().lower()
+    return mode if mode in {"relevant", "latest"} else "relevant"
+
+
+def _dedupe_results(results: list[dict]) -> list[dict]:
+    deduped: list[dict] = []
+    seen: set[str] = set()
+    for item in results or []:
+        url = str(item.get("href") or item.get("url") or "").strip().lower()
+        title = str(item.get("title") or "").strip().lower()
+        key = url or title
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+def _safe_news_search(ddgs: DDGS, query: str, max_results: int) -> list[dict]:
+    try:
+        items = ddgs.news(query=query, max_results=max_results)
+    except Exception:
+        return []
+
+    normalized: list[dict] = []
+    for item in items or []:
+        normalized.append({
+            "title": item.get("title"),
+            "body": item.get("body") or item.get("excerpt") or item.get("description"),
+            "href": item.get("url") or item.get("href"),
+            "date": item.get("date") or item.get("published"),
+            "source": item.get("source"),
+        })
+    return _dedupe_results(normalized)
+
+
+def _safe_text_search(ddgs: DDGS, query: str, max_results: int) -> list[dict]:
+    # Some DDGS backends intermittently fail with DecodeError (seen on bing/news).
+    # Try a few backend/query variants before giving up.
+    backends = ["auto", "html", "lite"]
+    query_variants = [query, f"{query} latest"]
+
+    for backend in backends:
+        for q in query_variants:
+            try:
+                items = ddgs.text(query=q, max_results=max_results, backend=backend)
+                if items:
+                    return _dedupe_results(list(items))
+            except TypeError:
+                # Older ddgs versions may not support backend kwarg.
+                try:
+                    items = ddgs.text(query=q, max_results=max_results)
+                    if items:
+                        return _dedupe_results(list(items))
+                except Exception:
+                    continue
+            except Exception:
+                continue
+    return []
+
+
+def _search_sync(query: str, max_results: int = 5, search_mode: str = "relevant") -> list[dict]:
+    """Run DDGS search with mode-aware strategy.
+
+    - relevant: normal web text search
+    - latest: prefer DDGS news results, then fall back to recency-biased text search
+    """
+    mode = _normalize_search_mode(search_mode)
+    with DDGS() as ddgs:
+        if mode == "latest":
+            news_results = _safe_news_search(ddgs, query, max_results)
+            if news_results:
+                return news_results
+
+            # fallback: bias text search toward recent results
+            year = datetime.utcnow().year
+            latest_text = _safe_text_search(ddgs, f"{query} {year}", max_results)
+            if latest_text:
+                return latest_text
+
+            return _safe_text_search(ddgs, query, max_results)
+
+        return _safe_text_search(ddgs, query, max_results)
 
 
 def _tokenize(text: str) -> set[str]:
@@ -36,9 +123,9 @@ def _domain_prior(url: str) -> float:
         return 0.0
     trust_boost = (
         ".gov", ".edu", "wikipedia.org", "britannica.com", "reuters.com",
-        "apnews.com", "who.int", "nih.gov", "docs.", "developer.", "github.com",
+        "apnews.com", "who.int", "nih.gov", "docs.", "developer.", "github.com", "fandom.com",
     )
-    low_signal = ("fandom.com", "pinterest.", "quora.com")
+    low_signal = ("pinterest.", "quora.com")
     if any(t in lowered for t in trust_boost):
         return 0.12
     if any(t in lowered for t in low_signal):
@@ -101,10 +188,15 @@ async def _fetch_with_trafilatura(url: str) -> str:
         return ""
 
 
-async def web_search(query: str, max_results: int = 5) -> str:
+async def web_search(query: str, max_results: int = 5, search_mode: str = "relevant") -> str:
     """Run a web search, rank results, fetch and extract content from top 3.
-    
+
     Use when the user query indicates they want up-to-date, time-sensitive information, or they asked about something you're unsure about.
+
+    Parameters:
+    - query: search terms
+    - max_results: number of candidates to pull before selecting top excerpts (3-8)
+    - search_mode: "relevant" (default) or "latest"
     """
 
     normalized_query = (query or "").strip()
@@ -112,16 +204,17 @@ async def web_search(query: str, max_results: int = 5) -> str:
         return "Please provide a non-empty search query."
 
     normalized_max = max(3, min(int(max_results or 5), 8))
+    normalized_mode = _normalize_search_mode(search_mode)
 
     try:
-        results = await asyncio.to_thread(_search_sync, normalized_query, normalized_max)
+        results = await asyncio.to_thread(_search_sync, normalized_query, normalized_max, normalized_mode)
     except Exception as exc:
         return f"Web search failed: {exc}"
 
     if not results:
         return "No results found."
 
-    ranked = _rank_results(normalized_query, results)
+    ranked = _rank_results(normalized_query, results) if normalized_mode == "relevant" else list(results)
     top3 = ranked[:3]
 
     # fetch all 3 concurrently
@@ -137,6 +230,9 @@ async def web_search(query: str, max_results: int = 5) -> str:
         block = f"### Result {idx}: {title}"
         if url:
             block += f"\nURL: {url}"
+        date = (item.get("date") or "").strip() if isinstance(item.get("date"), str) else ""
+        if date:
+            block += f"\nPublished: {date}"
         if excerpt:
             block += f"\n\n{excerpt}"
         elif snippet:

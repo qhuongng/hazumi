@@ -76,6 +76,20 @@ Parameters:
 - `query` (string): A short, specific search query as you would type into a search engine.
   Good: "Qwen3 Ollama tool calling bug 2025"
   Bad: "can you find information about the thing I mentioned earlier about Qwen"
+- `search_mode` (string, optional): Choose retrieval intent.
+  - `"relevant"` (default): best topical match regardless of freshness
+  - `"latest"`: prioritize recent/news-like results
+
+When to set `search_mode="latest"`:
+
+- The user asks for "latest", "today", "recent", "as of now", "current status", or similar
+- The topic changes frequently (news, prices, releases, outages, sports, policy updates, anime season announcements, music releases, etc.)
+
+When to keep `search_mode="relevant"`:
+
+- The user asks for evergreen background, definitions, or stable reference material
+
+If the user intent is ambiguous, default to `search_mode="relevant"` unless they include explicit recency cues (e.g. "latest", "today", "right now", "as of now").
 
 ### Scenario Examples
 
@@ -89,6 +103,11 @@ Parameters:
 - User: "Is Chuck Norris still alive?" → Time-sensitive information.
 - User: "How old is Cate Blanchett?" → Time-sensitive information.
 - User: "Do you know Linnea?" → The term might not be present in your training data, so trigger a search.
+
+Example tool call styles:
+
+- `web_search(query="latest iOS version", search_mode="latest")`
+- `web_search(query="how transformers work", search_mode="relevant")`
 
 **DO NOT call web_search:**
 

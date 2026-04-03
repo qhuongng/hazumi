@@ -1,7 +1,12 @@
 import httpx
 import json
-import inspect
-import re
+from helpers.engine import (
+    build_common_llm_fields,
+    apply_thinking_payload_field,
+    build_tools,
+)
+from helpers.parsing import extract_response_message, is_compute_error, is_unsupported_parameter_error
+from helpers.text import normalize_for_dedupe, strip_thought_blocks
 
 from constants.config.llm import (
     LLM_MODEL,
@@ -13,7 +18,7 @@ from constants.config.llm import (
 )
 from core.context import build_system_prompt
 from helpers import http as http_helpers
-from helpers.log import get_logger, log_messages, log_tool_use
+from helpers.log import get_logger, log_messages, log_tool_use, log_prompt
 
 
 LOGGER = get_logger(__name__)
@@ -33,116 +38,7 @@ def _log_llm_exception(prefix: str, exc: Exception):
     LOGGER.exception("%s: %s", prefix, exc)
 
 
-def _build_common_llm_fields() -> dict:
-    return {
-        "stream": False,
-    }
-
-
-def _normalize_for_dedupe(value: str) -> str:
-    text = re.sub(r"<@!?\d+>", "", str(value or ""))
-    text = " ".join(text.split())
-    return text.strip().lower()
-
-
-def _is_compute_error(response_text: str) -> bool:
-    text = str(response_text or "").lower()
-    return "compute error" in text or "insufficient memory" in text
-
-
-def _is_unsupported_parameter_error(response_text: str, parameter_name: str) -> bool:
-    text = str(response_text or "").lower()
-    param = str(parameter_name or "").strip().lower()
-    if not param or param not in text:
-        return False
-    return any(
-        token in text
-        for token in (
-            "unsupported",
-            "unknown",
-            "unrecognized",
-            "not permitted",
-            "extra inputs",
-            "invalid",
-        )
-    )
-
-
-def _apply_thinking_payload_field(payload: dict, thinking_enabled: bool | None) -> tuple[dict, bool]:
-    if thinking_enabled is None:
-        return payload, False
-
-    field_name = str(LLM_THINKING_PARAM_NAME or "").strip()
-    if not field_name:
-        return payload, False
-
-    payload[field_name] = bool(thinking_enabled)
-    return payload, True
-
-
-def _json_type_for_annotation(annotation) -> str:
-    if annotation in (int,):
-        return "integer"
-    if annotation in (float,):
-        return "number"
-    if annotation in (bool,):
-        return "boolean"
-    return "string"
-
-
-def _build_tool_schema(tool_fn) -> dict:
-    signature = inspect.signature(tool_fn)
-    properties: dict = {}
-    required: list[str] = []
-
-    for param in signature.parameters.values():
-        if param.kind not in (
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            inspect.Parameter.KEYWORD_ONLY,
-        ):
-            continue
-        if param.name.startswith("_"):
-            continue
-
-        json_type = _json_type_for_annotation(param.annotation)
-        properties[param.name] = {"type": json_type}
-        if param.default is inspect.Parameter.empty:
-            required.append(param.name)
-
-    tool_description = (inspect.getdoc(tool_fn) or "").strip()
-    function_spec = {
-        "name": tool_fn.__name__,
-        "description": tool_description or f"Call tool `{tool_fn.__name__}`.",
-        "parameters": {
-            "type": "object",
-            "properties": properties,
-            "additionalProperties": False,
-        },
-    }
-    if required:
-        function_spec["parameters"]["required"] = required
-
-    return {"type": "function", "function": function_spec}
-
-
-def _build_tools(tools: list | None) -> list[dict]:
-    if not tools:
-        return []
-    schemas: list[dict] = []
-    for tool_fn in tools:
-        try:
-            schemas.append(_build_tool_schema(tool_fn))
-        except Exception as exc:
-            LOGGER.exception("Failed to build schema for tool `%s`: %s", getattr(tool_fn, "__name__", tool_fn), exc)
-    return schemas
-
-
-def _extract_response_message(data: dict) -> dict:
-    choices = data.get("choices") or []
-    if not choices:
-        return {}
-    first = choices[0] or {}
-    return first.get("message") or {}
+# helper functions for engine behavior live in helpers.engine
 
 
 async def process_message_with_history(
@@ -160,10 +56,22 @@ async def process_message_with_history(
         LOGGER.exception("Context load error: %s", exc)
         system = "You are a helpful assistant."
 
-    # discord context is a user message after the system message
-    # log_prompt(LOGGER, system, context_note)
+    # gemma-4 expects an explicit thinking token inserted into the system
+    # prompt to enable the internal reasoning channel. If the caller
+    # requested thinking, prepend the token so the model emits thought blocks.
+    try:
+        if thinking_enabled:
+            think_token = "<|think|>"
+            if not str(system or "").lstrip().startswith(think_token):
+                system = f"{think_token}\n{system}"
+    except Exception:
+        # non-fatal: if anything goes wrong here, fall back to original system
+        pass
 
-    normalized_text = _normalize_for_dedupe(text)
+    # discord context is a user message after the system message
+    log_prompt(LOGGER, system, context_note)
+
+    normalized_text = normalize_for_dedupe(text)
     if thinking_enabled is False:
         normalized_text = "/no_think " + normalized_text
     filtered_history = list(history or [])
@@ -171,20 +79,24 @@ async def process_message_with_history(
         last = filtered_history[-1]
         if (
             last.get("role") == "user"
-            and _normalize_for_dedupe(str(last.get("content") or "")) == normalized_text
+            and normalize_for_dedupe(str(last.get("content") or "")) == normalized_text
         ):
             filtered_history = filtered_history[:-1]
 
     messages = [{"role": "system", "content": system}]
     if context_note:
         messages.append({"role": "user", "content": f"# Discord context\n\n{context_note}"})
-    messages += [
-        {"role": m["role"], "content": str(m["content"])}
-        for m in filtered_history
-    ]
+
+    # Append history but strip any internal thought blocks from assistant messages
+    for m in filtered_history:
+        role = m.get("role")
+        content = str(m.get("content") or "")
+        if role == "assistant":
+            content = strip_thought_blocks(content)
+        messages.append({"role": role, "content": content})
     messages.append({"role": "user", "content": text})
     active_tools = tools or []
-    chat_tools = _build_tools(active_tools)
+    chat_tools = build_tools(active_tools)
     tool_map = {fn.__name__: fn for fn in active_tools}
     LOGGER.info(
         "[tooling] prepared tool map user_id=%s user_name=%s tools=%s",
@@ -200,9 +112,9 @@ async def process_message_with_history(
                 "model": LLM_MODEL,
                 "messages": messages,
                 "tools": chat_tools,
-                **_build_common_llm_fields(),
+                **build_common_llm_fields(),
             }
-            base_payload, think_field_included = _apply_thinking_payload_field(base_payload, thinking_enabled)
+            base_payload, think_field_included = apply_thinking_payload_field(base_payload, thinking_enabled)
             log_messages(LOGGER, messages)
 
             async with httpx.AsyncClient() as http_client:
@@ -239,7 +151,7 @@ async def process_message_with_history(
                     should_retry_without_think_field = (
                         think_field_included
                         and not think_field_retry_used
-                        and _is_unsupported_parameter_error(response.text, LLM_THINKING_PARAM_NAME)
+                        and is_unsupported_parameter_error(response.text, LLM_THINKING_PARAM_NAME)
                     )
                     if should_retry_without_think_field:
                         think_field_retry_used = True
@@ -255,7 +167,7 @@ async def process_message_with_history(
                     should_retry_compute = (
                         attempt == 0
                         and response.status_code >= 500
-                        and _is_compute_error(response.text)
+                        and is_compute_error(response.text)
                     )
                     if should_retry_compute:
                         LOGGER.warning(
@@ -266,7 +178,7 @@ async def process_message_with_history(
                         payload = {
                             "model": LLM_MODEL,
                             "messages": reduced_messages,
-                            **_build_common_llm_fields(),
+                            **build_common_llm_fields(),
                         }
                         continue
 
@@ -278,16 +190,18 @@ async def process_message_with_history(
             final_text = final_text or FALLBACK_REPLY
             break
 
-        msg = _extract_response_message(data)
+        msg = extract_response_message(data)
         msg_content = msg.get("content") or ""
         msg_tool_calls = msg.get("tool_calls") or []
-        messages.append({"role": "assistant", "content": msg_content, **(
+        # strip internal thought blocks from the model output before adding to history
+        cleaned_content = strip_thought_blocks(msg_content)
+        messages.append({"role": "assistant", "content": cleaned_content, **(
             {"tool_calls": msg_tool_calls}
             if msg_tool_calls else {}
         )})
 
         if not msg_tool_calls:
-            final_text = msg_content
+            final_text = cleaned_content
             break
 
         for tool_call in msg_tool_calls:
