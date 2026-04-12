@@ -1,6 +1,7 @@
 import os
 import re
 
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -36,7 +37,9 @@ def build_system_prompt(user_id: str, user_name: str = "") -> str:
     else:
         memories = "- (no memories)"
 
-    return f"""{base}
+    return f"""Today is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.
+
+{base}
 
 # Who you are
 
