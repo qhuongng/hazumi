@@ -12,3 +12,5 @@ DISCORD_MESSAGE_MAX_LENGTH = 2000
 
 # history and context
 CHANNEL_WINDOW_SIZE = 14  # number of recent messages to cache for context
+
+NAME_PING_REACTION = "🤨"

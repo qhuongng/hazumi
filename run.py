@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import aiohttp
 import discord
 
 from discord.ext import commands
@@ -36,35 +37,37 @@ def make_bot() -> commands.Bot:
 
 async def run_bot():
     token = os.getenv("DISCORD_TOKEN")
-    init_db()
-
     delay = RETRY_DELAY
 
     while True:
+        init_db()  # re-initialize on every reconnect attempt
         bot = make_bot()
+        reconnect_ok = False
+
         try:
             LOGGER.info("Starting bot...")
             await bot.start(token)
-            # bot.start() only returns cleanly on a graceful logout,
-            # so reset the delay on a clean exit
-            delay = RETRY_DELAY
+            reconnect_ok = True
         except discord.LoginFailure:
             # bad token — no point retrying
             LOGGER.critical("Invalid Discord token. Shutting down.")
             break
         except (discord.ConnectionClosed, discord.GatewayNotFound) as e:
             LOGGER.warning(f"Gateway error: {e}. Retrying in {delay}s...")
-        except OSError as e:
-            # Covers socket.gaierror / DNS failures
+        except (OSError, aiohttp.ClientConnectorError) as e:
+            # Covers socket.gaierror, DNS failures, and aiohttp connector errors
             LOGGER.warning(f"Network/DNS error: {e}. Retrying in {delay}s...")
         except Exception as e:
-            LOGGER.error(f"Unexpected error: {e}. Retrying in {delay}s...")
+            LOGGER.error(f"Unexpected error: {e}. Retrying in {delay}s...", exc_info=True)
         finally:
             if not bot.is_closed():
                 await bot.close()
 
+        if reconnect_ok:
+            delay = RETRY_DELAY  # reset backoff on clean exit
+        
         await asyncio.sleep(delay)
-        delay = min(delay * 2, MAX_RETRY_DELAY)  # exponential backoff, capped
+        delay = min(delay * 2, MAX_RETRY_DELAY)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,12 @@
+import re
+
 import discord
 from discord.ext import commands
 
 from bot.runtime import handle_message
 from constants.config.llm import FALLBACK_REPLY
-from core.memory import get_guild_config, init_db, set_guild_config
+from constants.config.discord import NAME_PING_REACTION
+from core.memory import get_guild_config, set_guild_config
 from core.scheduler import ensure_scheduler_started
 from helpers import discord as discord_helpers
 from helpers.log import get_logger
@@ -49,6 +52,18 @@ def register_events(bot: commands.Bot, default_guild_config: dict):
             mentioned_bot = bot.user in message.mentions
             should_respond = in_dedicated_channel or mentioned_bot
             think_enabled = bool(config.get("think", default_guild_config.get("think", False)))
+
+            # just a fun bit where the bot reacts if it's mentioned by name but not pinged
+            bot_name = (bot.user.display_name or bot.user.name or "").strip()
+            content = message.content or ""
+            name_pattern = rf"(?<!\w){re.escape(bot_name)}(?!\w)" if bot_name else None
+            contains_bot_name = bool(name_pattern and re.search(name_pattern, content, flags=re.IGNORECASE))
+
+            if contains_bot_name and not should_respond:
+                try:
+                    await message.add_reaction(NAME_PING_REACTION)
+                except (discord.Forbidden, discord.HTTPException):
+                    LOGGER.debug("Unable to add name ping reaction for message_id=%s", message.id)
 
             if should_respond:
                 try:
