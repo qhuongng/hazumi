@@ -166,8 +166,8 @@ async def build_custom_history(
             f"{context_note}\n\n"
             "## Latest Discord messages\n\n"
             "These are the most recent messages in the conversation. You should use them to have a rough idea of the conversation topic and flow, but don't reply to them directly.\n\n"
-            "Format: msg_id id (reply to id) - username: message\n\n",
-            "CRITICAL: Do not let 'username: ' leak into your response, it's only part of the context formatting.\n\n",
+            "Format: msg_id id (reply to id) - username: message\n\n"
+            "CRITICAL: Do not let 'username: ' leak into your response, it's only part of the context formatting.\n\n"
             f"{context_rows}"
         )
 

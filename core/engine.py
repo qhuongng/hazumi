@@ -94,6 +94,7 @@ async def process_message_with_history(
         if role == "assistant":
             content = strip_thought_blocks(content)
         messages.append({"role": role, "content": content})
+        
     messages.append({"role": "user", "content": text})
     active_tools = tools or []
     chat_tools = build_tools(active_tools)
