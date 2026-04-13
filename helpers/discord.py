@@ -1,4 +1,7 @@
 import discord
+import random
+
+from constants.config.discord import NAME_PING_REACTIONS
 
 
 def is_prefix_command(content: str, prefix: str = "!") -> bool:
@@ -62,3 +65,7 @@ async def safe_reply(message: discord.Message, content: str, logger=None):
             logger.exception("Reply send error: %s", exc)
         else:
             print(f"Reply send error: {exc}")
+
+def get_random_reaction() -> str:
+    """Get a random reaction emoji from the predefined list."""
+    return random.choice(NAME_PING_REACTIONS)

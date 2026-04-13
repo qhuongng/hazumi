@@ -5,7 +5,6 @@ from discord.ext import commands
 
 from bot.runtime import handle_message
 from constants.config.llm import FALLBACK_REPLY
-from constants.config.discord import NAME_PING_REACTION
 from core.memory import get_guild_config, set_guild_config
 from core.scheduler import ensure_scheduler_started
 from helpers import discord as discord_helpers
@@ -61,7 +60,7 @@ def register_events(bot: commands.Bot, default_guild_config: dict):
 
             if contains_bot_name and not should_respond:
                 try:
-                    await message.add_reaction(NAME_PING_REACTION)
+                    await message.add_reaction(discord_helpers.get_random_reaction())
                 except (discord.Forbidden, discord.HTTPException):
                     LOGGER.debug("Unable to add name ping reaction for message_id=%s", message.id)
 
