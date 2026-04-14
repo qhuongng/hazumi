@@ -269,3 +269,19 @@ def get_channel_recent_messages(guild_id: str, channel_id: str, limit: int = 10)
     return [dict(r) for r in reversed(rows)]
 
 
+def prune_conversation_history(older_than_hours: int = 48) -> dict:
+    with get_conn() as conn:
+        cursor = conn.execute(
+            """
+            DELETE FROM conversation_history
+            WHERE datetime(created_at) < datetime('now', ?)
+            """,
+            (f"-{older_than_hours} hours",),
+        )
+
+    return {
+        "pruned": int(cursor.rowcount if cursor.rowcount is not None else 0),
+        "retention_hours": older_than_hours,
+    }
+
+
