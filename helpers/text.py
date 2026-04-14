@@ -45,9 +45,11 @@ def strip_thought_blocks(text: str) -> str:
         return ""
     s = str(text)
     try:
-        # Remove blocks like: <|channel>thought ... <channel|>
+        # remove blocks like: <|channel>thought ... <channel|>
         s = re.sub(r"(?is)<\|channel\>thought.*?<channel\|>", "", s)
+        # keep line breaks for texting rhythm, but prevent paragraph-style blank lines.
         s = "\n".join([line for line in s.splitlines()]).strip()
+        s = re.sub(r"\n[ \t]*\n+", "\n", s)
     except Exception:
         return s.strip()
     return s.strip()
