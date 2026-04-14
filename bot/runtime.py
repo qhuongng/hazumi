@@ -1,6 +1,11 @@
 import discord
 
-from constants.config.discord import CHANNEL_WINDOW_SIZE, DISCORD_MESSAGE_CHUNK_SIZE, DISCORD_MESSAGE_MAX_LENGTH
+from constants.config.discord import (
+    CHANNEL_WINDOW_SIZE,
+    DEFAULT_TOOL_REACTION,
+    DISCORD_MESSAGE_CHUNK_SIZE,
+    DISCORD_MESSAGE_MAX_LENGTH,
+)
 from core.memory import insert_discord_message
 from core.engine import process_message_with_history
 from helpers import discord as discord_helpers
@@ -10,6 +15,10 @@ from tools import load_tool_functions
 
 
 _active_tools = load_tool_functions()
+_tool_reaction_by_name = {
+    fn.__name__: str(getattr(fn, "_reaction_emoji", "")).strip() or DEFAULT_TOOL_REACTION
+    for fn in _active_tools
+}
 LOGGER = get_logger(__name__)
 LOGGER.info("[tooling] loaded tools count=%s names=%s", len(_active_tools), [fn.__name__ for fn in _active_tools])
 
@@ -190,15 +199,21 @@ async def handle_message(bot: discord.Client, message: discord.Message, think_en
     should_mention_author = False
     tool_reaction_added = False
 
-    async def maybe_add_tool_reaction():
+    async def maybe_add_tool_reaction(tool_name: str):
         nonlocal tool_reaction_added
         if tool_reaction_added:
             return
+        reaction_emoji = _tool_reaction_by_name.get(tool_name, DEFAULT_TOOL_REACTION)
         try:
-            await message.add_reaction("🛠️")
+            await message.add_reaction(reaction_emoji)
             tool_reaction_added = True
         except (discord.Forbidden, discord.HTTPException):
-            LOGGER.debug("Unable to add tool reaction for message_id=%s", message.id)
+            LOGGER.debug(
+                "Unable to add tool reaction for message_id=%s tool=%s emoji=%s",
+                message.id,
+                tool_name,
+                reaction_emoji,
+            )
 
     if message.reference and message.reference.message_id:
         # only mention author automatically in bot-thread reply flows

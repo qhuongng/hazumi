@@ -9,6 +9,7 @@ DEFAULT_GUILD_CONFIG = {
 DISCORD_COMMAND_PREFIX = "!"
 DISCORD_MESSAGE_CHUNK_SIZE = 1990  # discord's limit is 2000, leave some buffer
 DISCORD_MESSAGE_MAX_LENGTH = 2000
+DEFAULT_TOOL_REACTION = "🛠️"
 
 # history and context
 CHANNEL_WINDOW_SIZE = 14  # number of recent messages to cache for context

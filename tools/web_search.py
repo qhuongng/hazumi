@@ -9,6 +9,8 @@ from ddgs import DDGS
 
 from constants.web_search import STOP_WORDS, TRUSTED_DOMAINS, LOW_SIGNAL_DOMAINS
 
+TOOL_REACTION = "🔎"
+
 
 logging.getLogger("trafilatura").setLevel(logging.ERROR)
 

@@ -30,6 +30,9 @@ def load_tool_functions() -> list:
 
 		tool_fn = getattr(module, module_name, None)
 		if callable(tool_fn):
+			tool_reaction = getattr(module, "TOOL_REACTION", None)
+			if isinstance(tool_reaction, str) and tool_reaction.strip():
+				setattr(tool_fn, "_reaction_emoji", tool_reaction.strip())
 			loaded_tools.append(tool_fn)
 		else:
 			LOGGER.warning("Tool missing callable (%s): expected function `%s`", module_name, module_name)

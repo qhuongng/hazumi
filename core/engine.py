@@ -50,7 +50,7 @@ async def process_message_with_history(
     context_note: str = "",
     tools: list | None = None,
     thinking_enabled: bool | None = None,
-    on_tool_call: Callable[[], Awaitable[None]] | None = None,
+    on_tool_call: Callable[[str], Awaitable[None]] | None = None,
 ) -> str:
     try:
         system = build_system_prompt(user_id=user_id, user_name=user_name)
@@ -208,14 +208,14 @@ async def process_message_with_history(
             break
 
         for tool_call in msg_tool_calls:
+            fn_name = ((tool_call.get("function") or {}).get("name") or "").strip()
             if on_tool_call is not None:
                 try:
-                    await on_tool_call()
+                    await on_tool_call(fn_name)
                 except Exception as exc:
                     LOGGER.debug("Tool-call hook failed user_id=%s error=%s", user_id, exc)
 
             tool_call_id = (tool_call.get("id") or "").strip()
-            fn_name = ((tool_call.get("function") or {}).get("name") or "").strip()
             fn_args = (tool_call.get("function") or {}).get("arguments") or {}
             if isinstance(fn_args, str):
                 try:
