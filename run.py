@@ -46,7 +46,7 @@ async def run_bot():
 
         try:
             LOGGER.info("Starting bot...")
-            await bot.start(token)
+            await bot.start(token, reconnect=False)
             reconnect_ok = True
         except discord.LoginFailure:
             # bad token — no point retrying
