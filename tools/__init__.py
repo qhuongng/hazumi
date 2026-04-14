@@ -11,7 +11,7 @@ def load_tool_functions() -> list:
 	"""Load callable tools from files in this package.
 
 	Convention: file name must match the tool function name.
-	Example: tools/remember.py -> remember(...)
+	Example: tools/web_search.py -> web_search(...)
 	"""
 
 	tools_dir = Path(__file__).resolve().parent

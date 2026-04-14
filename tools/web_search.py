@@ -3,13 +3,14 @@ import re
 import logging
 import httpx
 import trafilatura
-from datetime import datetime
 
+from datetime import datetime
 from ddgs import DDGS
+
+from constants.config import STOP_WORDS, TRUSTED_DOMAINS, LOW_SIGNAL_DOMAINS
 
 
 logging.getLogger("trafilatura").setLevel(logging.ERROR)
-
 
 
 def _normalize_search_mode(search_mode: str | None) -> str:
@@ -99,13 +100,9 @@ def _search_sync(query: str, max_results: int = 5, search_mode: str = "relevant"
 
 
 def _tokenize(text: str) -> set[str]:
-    stopwords = {
-        "the", "a", "an", "is", "am", "are", "was", "were", "to", "of", "and", "in", "on", "for",
-        "with", "that", "this", "it", "i", "my", "me", "we", "our", "you", "your", "they", "them",
-        "he", "she", "at", "as", "be", "or", "by", "from", "about", "what", "how", "who", "when",
-    }
+
     tokens = set(re.findall(r"[a-z0-9]+", (text or "").lower()))
-    return {t for t in tokens if t not in stopwords and len(t) > 1}
+    return {t for t in tokens if t not in STOP_WORDS and len(t) > 1}
 
 
 def _overlap_score(query_tokens: set[str], text: str) -> float:
@@ -121,14 +118,10 @@ def _domain_prior(url: str) -> float:
     lowered = (url or "").lower()
     if not lowered:
         return 0.0
-    trust_boost = (
-        ".gov", ".edu", "wikipedia.org", "britannica.com", "reuters.com",
-        "apnews.com", "who.int", "nih.gov", "docs.", "developer.", "github.com", "fandom.com",
-    )
-    low_signal = ("pinterest.", "quora.com")
-    if any(t in lowered for t in trust_boost):
+
+    if any(t in lowered for t in TRUSTED_DOMAINS):
         return 0.12
-    if any(t in lowered for t in low_signal):
+    if any(t in lowered for t in LOW_SIGNAL_DOMAINS):
         return -0.06
     return 0.0
 

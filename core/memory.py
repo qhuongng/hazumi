@@ -1,10 +1,6 @@
 import sqlite3
-import re
 
-from datetime import datetime, timedelta
 from pathlib import Path
-
-from constants.memory import DURABLE_MEMORY_MARKERS
 
 
 DB_PATH = Path("data/bot.db")
@@ -20,12 +16,6 @@ def get_conn():
 def init_db():
     with get_conn() as conn:
         conn.executescript("""
-            CREATE TABLE IF NOT EXISTS memories (
-                id INTEGER PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                value TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
             CREATE TABLE IF NOT EXISTS guild_config (
                 guild_id TEXT PRIMARY KEY,
                 bot_channel_id TEXT,
@@ -48,137 +38,6 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_conversation_channel_recent
             ON conversation_history (guild_id, channel_id, created_at DESC);
         """)
-
-
-def add_memory(user_id: str, value: str):
-    with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO memories (user_id, value) VALUES (?, ?)",
-            (user_id, value),
-        )
-
-
-def get_memories(user_id: str, limit: int | None = 20) -> list[dict]:
-    with get_conn() as conn:
-        if limit is None:
-            rows = conn.execute(
-                """
-                SELECT id, value, created_at
-                FROM memories
-                WHERE user_id = ?
-                ORDER BY created_at DESC, id DESC
-                """,
-                (user_id,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """
-                SELECT id, value, created_at
-                FROM memories
-                WHERE user_id = ?
-                ORDER BY created_at DESC, id DESC
-                LIMIT ?
-                """,
-                (user_id, limit),
-            ).fetchall()
-    return [dict(r) for r in reversed(rows)]
-
-
-def get_memory_rows(user_id: str) -> list[dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT id, value, created_at
-            FROM memories
-            WHERE user_id = ?
-            ORDER BY created_at DESC, id DESC
-            """,
-            (user_id,),
-        ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def list_memory_user_ids() -> list[str]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT DISTINCT user_id
-            FROM memories
-            ORDER BY user_id ASC
-            """
-        ).fetchall()
-    return [str(r["user_id"]) for r in rows]
-
-
-def _parse_memory_timestamp(raw: str) -> datetime:
-    try:
-        return datetime.fromisoformat(raw)
-    except Exception:
-        return datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")
-
-
-def _is_durable_memory(content: str) -> bool:
-    lowered = content.lower()
-    return any(marker in lowered for marker in DURABLE_MEMORY_MARKERS)
-
-
-def _memory_topic_signature(content: str) -> str:
-    stopwords = {
-        "the", "a", "an", "is", "am", "are", "was", "were", "to", "of", "and",
-        "in", "on", "for", "with", "that", "this", "it", "i", "my", "me", "we",
-        "our", "you", "your", "they", "them", "he", "she", "at", "as", "be",
-    }
-    tokens = [t for t in re.findall(r"[a-z0-9']+", content.lower()) if t not in stopwords]
-    return " ".join(tokens[:5])
-
-
-def prune_memories_for_user(user_id: str, older_than_days: int = 14) -> dict:
-    rows = get_memory_rows(user_id)
-    if not rows:
-        return {"user_id": user_id, "pruned": 0, "kept": 0}
-
-    cutoff = datetime.utcnow() - timedelta(days=older_than_days)
-    seen_signatures: set[str] = set()
-    prune_ids: list[int] = []
-
-    for row in rows:
-        content = str(row["value"])
-        created_at = _parse_memory_timestamp(str(row["created_at"]))
-        durable = _is_durable_memory(content)
-        signature = _memory_topic_signature(content)
-
-        # newer memory wins for the same topic unless the older one is durable.
-        if signature and signature in seen_signatures and not durable:
-            prune_ids.append(int(row["id"]))
-            continue
-
-        # non-durable memories older than retention window are pruned.
-        if created_at < cutoff and not durable:
-            prune_ids.append(int(row["id"]))
-            continue
-
-        if signature:
-            seen_signatures.add(signature)
-
-    if prune_ids:
-        placeholders = ",".join("?" for _ in prune_ids)
-        with get_conn() as conn:
-            conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", prune_ids)
-
-    return {"user_id": user_id, "pruned": len(prune_ids), "kept": len(rows) - len(prune_ids)}
-
-
-def prune_memories(older_than_days: int = 14) -> dict:
-    user_ids = list_memory_user_ids()
-    total_pruned = 0
-    total_kept = 0
-
-    for user_id in user_ids:
-        result = prune_memories_for_user(user_id, older_than_days=older_than_days)
-        total_pruned += int(result["pruned"])
-        total_kept += int(result["kept"])
-
-    return {"users": len(user_ids), "pruned": total_pruned, "kept": total_kept}
 
 
 def get_guild_config(guild_id: str) -> dict | None:
