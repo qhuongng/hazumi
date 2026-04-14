@@ -188,6 +188,17 @@ async def handle_message(bot: discord.Client, message: discord.Message, think_en
     text = discord_helpers.format_chat_line(user_name, text)
 
     should_mention_author = False
+    tool_reaction_added = False
+
+    async def maybe_add_tool_reaction():
+        nonlocal tool_reaction_added
+        if tool_reaction_added:
+            return
+        try:
+            await message.add_reaction("🛠️")
+            tool_reaction_added = True
+        except (discord.Forbidden, discord.HTTPException):
+            LOGGER.debug("Unable to add tool reaction for message_id=%s", message.id)
 
     if message.reference and message.reference.message_id:
         # only mention author automatically in bot-thread reply flows
@@ -213,6 +224,7 @@ async def handle_message(bot: discord.Client, message: discord.Message, think_en
             context_note=context_note,
             tools=_active_tools,
             thinking_enabled=think_enabled,
+            on_tool_call=maybe_add_tool_reaction,
         )
 
     if len(response) <= DISCORD_MESSAGE_MAX_LENGTH:
