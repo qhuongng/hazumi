@@ -7,7 +7,7 @@ import trafilatura
 from datetime import datetime
 from ddgs import DDGS
 
-from constants.config import STOP_WORDS, TRUSTED_DOMAINS, LOW_SIGNAL_DOMAINS
+from constants.web_search import STOP_WORDS, TRUSTED_DOMAINS, LOW_SIGNAL_DOMAINS
 
 
 logging.getLogger("trafilatura").setLevel(logging.ERROR)
