@@ -22,6 +22,11 @@ def register_events(bot: commands.Bot, default_guild_config: dict):
             print(f"{bot.user} woke up and is ready to roll! >:3")
         except Exception as exc:
             print(f"Startup error: {exc}")
+            
+    @bot.event
+    async def on_disconnect():
+        LOGGER.warning("Disconnected from Discord. Closing for outer loop retry...")
+        await bot.close()
 
     @bot.event
     async def on_message(message: discord.Message):

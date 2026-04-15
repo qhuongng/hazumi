@@ -1,6 +1,6 @@
 {
   "logging": {
-    "tool_use": false,
+    "tool_use": true,
     "messages": false,
     "prompt": false
   }

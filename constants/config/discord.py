@@ -1,3 +1,7 @@
+# connection
+RETRY_DELAY = 10
+MAX_RETRY_DELAY = 300
+
 # default guild configuration
 DEFAULT_GUILD_CONFIG = {
     "bot_channel_id": None,

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 
-_TRUE_VALUES = {"1", "true", "yes", "on", "y", "enabled", "enable"}
+_TRUE_VALUES = {"1", "true", "yes", "on", "y", "enabled", "enable", 1, True}
 _configured = False
 _last_debug: bool | None = None
 _log_config: dict | None = None

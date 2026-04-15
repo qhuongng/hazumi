@@ -9,19 +9,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from constants.config.discord import DEFAULT_GUILD_CONFIG, DISCORD_COMMAND_PREFIX
 from bot.commands import register_commands
 from bot.events import register_events
-from helpers.log import get_logger
+from constants.config.discord import DEFAULT_GUILD_CONFIG, DISCORD_COMMAND_PREFIX, RETRY_DELAY, MAX_RETRY_DELAY
 from core.memory import init_db
+from helpers.log import get_logger
 
 LOGGER = get_logger(__name__)
 
 intents = discord.Intents.all()
 intents.message_content = True
-
-RETRY_DELAY = 30
-MAX_RETRY_DELAY = 300
 
 
 def make_bot() -> commands.Bot:
@@ -42,12 +39,11 @@ async def run_bot():
     while True:
         init_db()  # re-initialize on every reconnect attempt
         bot = make_bot()
-        reconnect_ok = False
+        start_time = asyncio.get_event_loop().time()
 
         try:
             LOGGER.info("Starting bot...")
             await bot.start(token, reconnect=False)
-            reconnect_ok = True
         except discord.LoginFailure:
             # bad token — no point retrying
             LOGGER.critical("Invalid Discord token. Shutting down.")
@@ -63,9 +59,11 @@ async def run_bot():
             if not bot.is_closed():
                 await bot.close()
 
-        if reconnect_ok:
-            delay = RETRY_DELAY  # reset backoff on clean exit
+        elapsed = asyncio.get_event_loop().time() - start_time
+        if elapsed > 60:
+            delay = RETRY_DELAY
         
+        LOGGER.info(f"Retrying in {delay}s...")
         await asyncio.sleep(delay)
         delay = min(delay * 2, MAX_RETRY_DELAY)
 
