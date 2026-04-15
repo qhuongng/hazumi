@@ -60,6 +60,7 @@ def _apply_levels(debug: bool):
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("apscheduler").setLevel(logging.WARNING)
+    logging.getLogger("trafilatura").setLevel(logging.ERROR)
 
     # reduce verbosity from discord.py
     logging.getLogger('discord').setLevel(logging.WARNING)

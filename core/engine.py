@@ -101,12 +101,6 @@ async def process_message_with_history(
     active_tools = tools or []
     chat_tools = build_tools(active_tools)
     tool_map = {fn.__name__: fn for fn in active_tools}
-    LOGGER.info(
-        "[tooling] prepared tool map user_id=%s user_name=%s tools=%s",
-        user_id,
-        user_name,
-        list(tool_map.keys()),
-    )
 
     final_text = ""
     for _ in range(MAX_TOOL_ROUNDS):

@@ -1,6 +1,5 @@
 import asyncio
 import re
-import logging
 import httpx
 import trafilatura
 
@@ -11,8 +10,14 @@ from constants.web_search import STOP_WORDS, TRUSTED_DOMAINS, LOW_SIGNAL_DOMAINS
 
 TOOL_REACTION = "🔎"
 
+# module-level singleton
+_ddgs_instance: DDGS | None = None
 
-logging.getLogger("trafilatura").setLevel(logging.ERROR)
+def _get_ddgs() -> DDGS:
+    global _ddgs_instance
+    if _ddgs_instance is None:
+        _ddgs_instance = DDGS()
+    return _ddgs_instance
 
 
 def _normalize_search_mode(search_mode: str | None) -> str:
@@ -84,7 +89,7 @@ def _search_sync(query: str, max_results: int = 5, search_mode: str = "relevant"
     - latest: prefer DDGS news results, then fall back to recency-biased text search
     """
     mode = _normalize_search_mode(search_mode)
-    with DDGS() as ddgs:
+    with _get_ddgs() as ddgs:
         if mode == "latest":
             news_results = _safe_news_search(ddgs, query, max_results)
             if news_results:
@@ -204,6 +209,8 @@ async def web_search(query: str, max_results: int = 5, search_mode: str = "relev
     try:
         results = await asyncio.to_thread(_search_sync, normalized_query, normalized_max, normalized_mode)
     except Exception as exc:
+        global _ddgs_instance
+        _ddgs_instance = None  # force recreation on next call
         return f"Web search failed: {exc}"
 
     if not results:
