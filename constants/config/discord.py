@@ -18,4 +18,4 @@ DEFAULT_TOOL_REACTION = "🛠️"
 # history and context
 CHANNEL_WINDOW_SIZE = 14  # number of recent messages to cache for context
 
-NAME_PING_REACTIONS = ["🤨", "🙈", "😳", "🫣", "🫡", "👀", "🌝", "🧍‍♀️"]
+NAME_PING_REACTIONS = ["🤨", "🙈", "😳", "🫣", "🫡", "👀", "🌝", "🥺", "😝", "🤭", "👋", "🙋‍♀️", "💃"]

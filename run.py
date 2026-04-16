@@ -34,12 +34,21 @@ def make_bot() -> commands.Bot:
 
 async def run_bot():
     token = os.getenv("DISCORD_TOKEN")
+    if not token:
+        LOGGER.critical("DISCORD_TOKEN not set. Shutting down.")
+        return
+
     delay = RETRY_DELAY
 
     while True:
         init_db()  # re-initialize on every reconnect attempt
         bot = make_bot()
-        start_time = asyncio.get_event_loop().time()
+        connected_successfully = False
+
+        @bot.listen("on_ready")
+        async def _track_ready():
+            nonlocal connected_successfully
+            connected_successfully = True
 
         try:
             LOGGER.info("Starting bot...")
@@ -50,8 +59,11 @@ async def run_bot():
             break
         except (discord.ConnectionClosed, discord.GatewayNotFound) as e:
             LOGGER.warning(f"Gateway error: {e}. Retrying in {delay}s...")
+        except asyncio.CancelledError:
+            break
         except (OSError, aiohttp.ClientConnectorError) as e:
-            # Covers socket.gaierror, DNS failures, and aiohttp connector errors
+            # covers socket.gaierror, DNS failures, aiohttp connector errors,
+            # and wait_for() timeouts during WebSocket handshake
             LOGGER.warning(f"Network/DNS error: {e}. Retrying in {delay}s...")
         except Exception as e:
             LOGGER.error(f"Unexpected error: {e}. Retrying in {delay}s...", exc_info=True)
@@ -59,10 +71,10 @@ async def run_bot():
             if not bot.is_closed():
                 await bot.close()
 
-        elapsed = asyncio.get_event_loop().time() - start_time
-        if elapsed > 60:
+        # only reset backoff when the bot reaches ready state
+        if connected_successfully:
             delay = RETRY_DELAY
-        
+
         LOGGER.info(f"Retrying in {delay}s...")
         await asyncio.sleep(delay)
         delay = min(delay * 2, MAX_RETRY_DELAY)

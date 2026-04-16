@@ -37,10 +37,7 @@ def _log_llm_exception(prefix: str, exc: Exception):
         return
 
     LOGGER.exception("%s: %s", prefix, exc)
-
-
-# helper functions for engine behavior live in helpers.engine
-
+    
 
 async def process_message_with_history(
     user_id: str,
@@ -58,16 +55,13 @@ async def process_message_with_history(
         LOGGER.exception("Context load error: %s", exc)
         system = "You are a helpful assistant."
 
-    # gemma-4 expects an explicit thinking token inserted into the system
-    # prompt to enable the internal reasoning channel. If the caller
-    # requested thinking, prepend the token so the model emits thought blocks.
+    # prepend the token so the model emits thought blocks (specific for gemma 4)
     try:
         if thinking_enabled:
             think_token = "<|think|>"
             if not str(system or "").lstrip().startswith(think_token):
                 system = f"{think_token}\n{system}"
     except Exception:
-        # non-fatal: if anything goes wrong here, fall back to original system
         pass
 
     # discord context is a user message after the system message
@@ -89,7 +83,7 @@ async def process_message_with_history(
     if context_note:
         messages.append({"role": "user", "content": f"# Discord context\n\n{context_note}"})
 
-    # Append history but strip any internal thought blocks from assistant messages
+    # append history but strip any internal thought blocks from assistant messages
     for m in filtered_history:
         role = m.get("role")
         content = str(m.get("content") or "")

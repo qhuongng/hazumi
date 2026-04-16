@@ -58,8 +58,6 @@ def _safe_news_search(ddgs: DDGS, query: str, max_results: int) -> list[dict]:
 
 
 def _safe_text_search(ddgs: DDGS, query: str, max_results: int) -> list[dict]:
-    # Some DDGS backends intermittently fail with DecodeError (seen on bing/news).
-    # Try a few backend/query variants before giving up.
     backends = ["auto", "html", "lite"]
     query_variants = [query, f"{query} latest"]
 
@@ -70,7 +68,7 @@ def _safe_text_search(ddgs: DDGS, query: str, max_results: int) -> list[dict]:
                 if items:
                     return _dedupe_results(list(items))
             except TypeError:
-                # Older ddgs versions may not support backend kwarg.
+                # older ddgs versions may not support backend kwarg.
                 try:
                     items = ddgs.text(query=q, max_results=max_results)
                     if items:
@@ -95,7 +93,7 @@ def _search_sync(query: str, max_results: int = 5, search_mode: str = "relevant"
             if news_results:
                 return news_results
 
-            # fallback: bias text search toward recent results
+            # fallback to bias text search toward recent results
             year = datetime.utcnow().year
             latest_text = _safe_text_search(ddgs, f"{query} {year}", max_results)
             if latest_text:

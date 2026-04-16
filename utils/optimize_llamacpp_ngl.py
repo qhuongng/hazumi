@@ -36,13 +36,13 @@ def try_llama_main(ngl, llama_main_path, model_path, desired_context,
   stdout, stderr = process.communicate()
   check_cuda_buffer_sizes(stderr.decode())
 
-  # Newer llama-cli builds may not echo the full prompt in stdout.
-  # Exit code is a more reliable indicator for fit/no-fit trial runs.
+  # newer llama-cli builds may not echo the full prompt in stdout
+  # exit code is a more reliable indicator for fit/no-fit trial runs
   return process.returncode == 0
 
 
 def best_tensor_split(vram_per_gpu, MiB_per_layer, ngl):
-  # No explicit split needed for single-GPU or unknown-VRAM environments.
+  # no explicit split needed for single-GPU or unknown-VRAM environments
   if len(vram_per_gpu) <= 1:
     return ''
 
@@ -152,7 +152,7 @@ if len(gpu_names) == 0:
     pcie_lanes_per_gpu = [0]
   main_gpu_ind = 0
 else:
-  # Pick main GPU: pick highest VRAM bandwidth GPU, with PCIe lanes as tiebreaker.
+  # pick main GPU: pick highest VRAM bandwidth GPU, with PCIe lanes as tiebreaker
   best_bw_inds = [i for i, x in enumerate(gpu_bandwidths) if x == max(gpu_bandwidths)]
   main_gpu_ind = best_bw_inds[0]
   best_pcie = pcie_lanes_per_gpu[main_gpu_ind]
@@ -195,7 +195,7 @@ if any(vram_per_gpu):
   total_overhead_guess = 11000 if model_size_MiB > 60000 else (5000 if model_size_MiB > 30000 else 2000)
   ngl_lowerlimit = min(model_layers, (sum(vram_per_gpu) - total_overhead_guess) // MiB_per_layer)
 else:
-  # Unknown VRAM (e.g. Apple Metal with no nvidia-smi): search full range.
+  # unknown VRAM (e.g. Apple Metal with no nvidia-smi): search full range.
   ngl_upperlimit = model_layers
   ngl_lowerlimit = 0
 

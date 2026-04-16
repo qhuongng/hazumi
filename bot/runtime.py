@@ -73,7 +73,6 @@ async def _build_reply_thread_history(bot: discord.Client, message: discord.Mess
             chain.append(parent)
         current = parent
 
-    # cap reply-chain length to the most recent 6 parents
     if len(chain) > 6:
         chain = chain[:6]
 

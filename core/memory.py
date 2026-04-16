@@ -1,16 +1,25 @@
 import sqlite3
 
+from contextlib import contextmanager
 from pathlib import Path
 
 
-DB_PATH = Path("data/bot.db")
-DB_PATH.parent.mkdir(exist_ok=True)
+DB_PATH = Path(__file__).parent.parent / "data" / "bot.db"
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
+@contextmanager
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def init_db():

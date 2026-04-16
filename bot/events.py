@@ -15,6 +15,8 @@ LOGGER = get_logger(__name__)
 
 
 def register_events(bot: commands.Bot, default_guild_config: dict):
+    _first_connect = True
+
     @bot.event
     async def on_ready():
         try:
@@ -22,11 +24,19 @@ def register_events(bot: commands.Bot, default_guild_config: dict):
             print(f"{bot.user} woke up and is ready to roll! >:3")
         except Exception as exc:
             print(f"Startup error: {exc}")
-            
+
     @bot.event
     async def on_disconnect():
-        LOGGER.warning("Disconnected from Discord. Closing for outer loop retry...")
-        await bot.close()
+        LOGGER.warning("Disconnected from Discord. Waiting for outer loop to retry...")
+
+    @bot.event
+    async def on_connect():
+        nonlocal _first_connect
+        if _first_connect:
+            LOGGER.info("Connected to Discord successfully.")
+            _first_connect = False
+        else:
+            LOGGER.info("Reconnected to Discord successfully.")
 
     @bot.event
     async def on_message(message: discord.Message):
