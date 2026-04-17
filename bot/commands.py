@@ -156,7 +156,7 @@ def register_commands(bot: commands.Bot, default_guild_config: dict):
             f"- {channel_text}{', but i **can still bomb u**' if bombing > 0 else ''}\n"
             f"- my brain is {'**on**' if config.get('think', default_guild_config['think']) else '**off**'}\n"
             f"- i'm currently {'**not ghosting**' if config.get('ignore_bots', default_guild_config['ignore_bots']) == False else '**ghosting**'} other bots\n"
-            f"- {bombing_text}{', but **u banned me from bombing** in' + banned_text if bombing > 0 and banned_channels else ''}\n\n"
+            f"- {bombing_text}{', but **u banned me from bombing** in ' + banned_text if bombing > 0 and banned_channels else ''}\n\n"
             f"pls use `!help` to see how to change these settings :3"
         )
 
@@ -178,7 +178,7 @@ def register_commands(bot: commands.Bot, default_guild_config: dict):
             "`!setchannel [id|0]`\nset dedicated yap channel using its id so u don't have to @mention me every time u wanna yap (`0` clears it)\n\n"
             "`!think`\ntoggle my brain on or off\n\n"
             "`!ignorebot`\ntoggle whether u want me to ghost other bots\n\n"
-            "`!config`\nshow current guild config\n\n"
+            "`!config`\nshow current server config\n\n"
             "### convo bombing\n\n"
             f"`!convobomb [rate]`\ntoggle whether i randomly bomb conversations, optionally set a rate between 0 and {MAX_CONVO_BOMB_CHANCE} (e.g. `!convobomb 0.1`)\n\n"
             "`!banbomb [id|0]`\nban a channel from conversation bombing by its id (`0` clears the ban list)\n\n"
