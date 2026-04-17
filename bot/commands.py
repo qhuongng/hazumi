@@ -59,7 +59,7 @@ def register_commands(bot: commands.Bot, default_guild_config: dict):
         try:
             parsed = float(rate)
         except ValueError:
-            await ctx.reply("rate must be a number between 0 and 0.5 (e.g. `0.1`) :<")
+            await ctx.reply(f"bomb rate must be a number between 0 and {MAX_CONVO_BOMB_CHANCE} (e.g. `0.1` for 10%, `0.03` for 3%) >:(")
             return
 
         if parsed == 0:
@@ -68,8 +68,10 @@ def register_commands(bot: commands.Bot, default_guild_config: dict):
             return
 
         if not (0 < parsed <= MAX_CONVO_BOMB_CHANCE):
-            await ctx.reply(f"rate must be between 0 and {MAX_CONVO_BOMB_CHANCE} :3 u don't want me to start bombing every single message, do you? >:o")
+            await ctx.reply(f"bomb rate must be between 0 and {MAX_CONVO_BOMB_CHANCE} :3 u don't want me to start bombing every single message, do you? >:o")
             return
+
+        parsed = round(parsed, 2)
 
         set_guild_config(str(ctx.guild.id), convo_bomb_chance=parsed)
         await ctx.reply(f"i'll now have a {parsed*100:.4g}% chance to randomly bomb the convo >:D")
