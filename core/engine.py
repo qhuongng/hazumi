@@ -48,6 +48,7 @@ async def process_message_with_history(
     tools: list | None = None,
     thinking_enabled: bool | None = None,
     on_tool_call: Callable[[str], Awaitable[None]] | None = None,
+    is_convo_bomb: bool = False,
 ) -> str:
     try:
         system = build_system_prompt(user_id=user_id, user_name=user_name)
@@ -68,9 +69,8 @@ async def process_message_with_history(
     log_prompt(LOGGER, system, context_note)
 
     normalized_text = normalize_for_dedupe(text)
-    if thinking_enabled is False:
-        normalized_text = "/no_think " + normalized_text
     filtered_history = list(history or [])
+
     if filtered_history:
         last = filtered_history[-1]
         if (

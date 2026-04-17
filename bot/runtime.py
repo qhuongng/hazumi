@@ -124,6 +124,7 @@ async def _get_recent_channel_rows_before_message(
 async def build_custom_history(
     bot: discord.Client,
     message: discord.Message,
+    is_convo_bomb: bool = False,
 ) -> tuple[list[dict], str]:
     """Build Discord context note from latest pre-message channel rows."""
 
@@ -147,10 +148,19 @@ async def build_custom_history(
             f"{context_rows}"
         )
 
+    if is_convo_bomb:
+        context_note = (
+            f"{context_note}\n\n"
+            "## Special instruction\n\n"
+            "You are jumping into this conversation uninvited. Do NOT directly address or reply to the message that triggered you — "
+            "instead, read the room and chime in naturally. You might share a reaction, drop an opinion, make an observation, ask a question, "
+            "or just say something relevant to what's been going on. Keep it casual and brief, like someone who just walked in and has something to add."
+        )
+
     return history, context_note
 
 
-async def handle_message(bot: discord.Client, message: discord.Message, think_enabled: bool = False):
+async def handle_message(bot: discord.Client, message: discord.Message, think_enabled: bool = False, is_convo_bomb: bool = False):
     """Main discord message pipeline: scope, history, model call, reply."""
 
     user_id = str(message.author.id)
@@ -205,6 +215,7 @@ async def handle_message(bot: discord.Client, message: discord.Message, think_en
             tools=_active_tools,
             thinking_enabled=think_enabled,
             on_tool_call=maybe_add_tool_reaction,
+            is_convo_bomb=is_convo_bomb,
         )
 
     if len(response) <= DISCORD_MESSAGE_MAX_LENGTH:

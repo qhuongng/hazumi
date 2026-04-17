@@ -92,13 +92,13 @@ def register_events(bot: commands.Bot, default_guild_config: dict):
             banned_channels_str = config.get("bombing_banned_channel_ids", default_guild_config.get("bombing_banned_channel_ids", ""))
             banned_channels = set(banned_channels_str.split(",")) if banned_channels_str else set()
             channel_is_banned = str(message.channel.id) in banned_channels
-            if convo_bomb_chance > 0 and not channel_is_banned and random.random() < convo_bomb_chance:
+            if convo_bomb_chance > 0 and not channel_is_banned and round(random.random(), 2) < convo_bomb_chance:
                 try:
                     await message.add_reaction("💣")
                 except (discord.Forbidden, discord.HTTPException):
                     pass
                 try:
-                    await handle_message(bot, message, think_enabled=think_enabled)
+                    await handle_message(bot, message, think_enabled=think_enabled, is_convo_bomb=True)
                 except Exception as exc:
                     LOGGER.exception(f"Message handling error (convo bomb): {exc}")
                     await discord_helpers.safe_reply(message, FALLBACK_REPLY, LOGGER)
