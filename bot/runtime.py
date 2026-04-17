@@ -6,7 +6,6 @@ from constants.config.discord import (
     DISCORD_MESSAGE_CHUNK_SIZE,
     DISCORD_MESSAGE_MAX_LENGTH,
 )
-from core.memory import insert_discord_message
 from core.engine import process_message_with_history
 from helpers import discord as discord_helpers
 from helpers import text as text_helpers
@@ -92,37 +91,6 @@ async def _build_reply_thread_history(bot: discord.Client, message: discord.Mess
     return history
 
 
-def store_discord_message(message: discord.Message):
-    """Persist one discord message row."""
-
-    insert_discord_message(
-        guild_id=str(message.guild.id),
-        channel_id=str(message.channel.id),
-        message_id=str(message.id),
-        reply_to_message_id=discord_helpers.message_reply_to_id(message),
-        author_id=str(message.author.id),
-        author_name=message.author.display_name,
-        is_bot=message.author.bot,
-        content=message.content,
-        created_at=message.created_at.isoformat(),
-    )
-
-
-async def cache_recent_channel_window(bot: discord.Client, message: discord.Message):
-    """Cache a small recent window so prompt history has nearby channel context."""
-
-    recent = [m async for m in message.channel.history(limit=CHANNEL_WINDOW_SIZE, oldest_first=False)]
-    recent.reverse()
-
-    for item in recent:
-        if await should_skip_history_message(bot, item):
-            continue
-        store_discord_message(item)
-
-    if not await should_skip_history_message(bot, message):
-        store_discord_message(message)
-
-
 async def _get_recent_channel_rows_before_message(
     bot: discord.Client,
     message: discord.Message,
@@ -188,8 +156,6 @@ async def handle_message(bot: discord.Client, message: discord.Message, think_en
     user_id = str(message.author.id)
     user_name = message.author.display_name
 
-    await cache_recent_channel_window(bot, message)
-
     text = message.content.replace(f"<@{bot.user.id}>", "").strip()
     if not text:
         text = message.content.strip() or "(no text)"
@@ -242,11 +208,9 @@ async def handle_message(bot: discord.Client, message: discord.Message, think_en
         )
 
     if len(response) <= DISCORD_MESSAGE_MAX_LENGTH:
-        sent = await message.reply(response, mention_author=should_mention_author)
-        store_discord_message(sent)
+        await message.reply(response, mention_author=should_mention_author)
     else:
         # discord has a hard message limit, so split long outputs safely.
         chunks = text_helpers.split_message_chunks(response, max_len=DISCORD_MESSAGE_CHUNK_SIZE)
         for chunk in chunks:
-            sent = await message.reply(chunk, mention_author=should_mention_author)
-            store_discord_message(sent)
+            await message.reply(chunk, mention_author=should_mention_author)

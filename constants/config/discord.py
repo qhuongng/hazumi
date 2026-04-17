@@ -7,7 +7,11 @@ DEFAULT_GUILD_CONFIG = {
     "bot_channel_id": None,
     "think": False,
     "ignore_bots": True,
+    "convo_bomb_chance": 0.0,
+    "bombing_banned_channel_ids": "",
 }
+
+MAX_CONVO_BOMB_CHANCE = 0.25  # maximum allowed rate
 
 # message handling
 DISCORD_COMMAND_PREFIX = "!"
