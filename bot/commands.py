@@ -180,7 +180,7 @@ def register_commands(bot: commands.Bot, default_guild_config: dict):
             "`!ignorebot`\ntoggle whether u want me to ghost other bots\n\n"
             "`!config`\nshow current server config\n\n"
             "### convo bombing\n\n"
-            f"`!convobomb [rate]`\ntoggle whether i randomly bomb conversations, optionally set a rate between 0 and {MAX_CONVO_BOMB_CHANCE} (e.g. `!convobomb 0.1`)\n\n"
+            f"`!convobomb [rate]`\ntoggle whether i randomly bomb conversations. set a rate between 0 and {MAX_CONVO_BOMB_CHANCE} (e.g. `!convobomb 0.1`)\n\n"
             "`!banbomb [id|0]`\nban a channel from conversation bombing by its id (`0` clears the ban list)\n\n"
             "`!unbanbomb [id]`\nremove a channel from the bombing ban list"
         )
