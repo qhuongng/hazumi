@@ -31,7 +31,7 @@ All commands use the `!` prefix.
 | `!setchannel [id\|0]`   | Set (or remove) the dedicated channel where the bot responds to all messages   |
 | `!think`                | Toggle the model's thinking/reasoning mode on or off                           |
 | `!ignorebot`            | Toggle whether the bot ignores messages from other bots                        |
-| `!convobomb [rate]`     | Set a random chance (0–1) for the bot to interject in any channel unprompted with configurable cap  |
+| `!convobomb [rate]`     | Set a random chance (0–1) for the bot to interject in any channel unprompted, with configurable cap  |
 | `!banbomb [channel_id]` | Exclude a channel from conversation bombing                                    |
 
 ## Setup & run
