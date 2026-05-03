@@ -2,7 +2,7 @@ import os
 
 
 # model configuration
-LLM_MODEL = "Qwen3.5-9B-Q4_K_M"
+LLM_MODEL = "gemma-4-E4B-it-oQ6"
 LLM_API_CHAT_URL = "http://localhost:8080/v1/chat/completions"
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_THINKING_PARAM_NAME = "think"
