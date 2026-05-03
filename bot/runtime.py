@@ -139,22 +139,21 @@ async def build_custom_history(
 
     if scope_rows:
         context_rows = "\n".join(discord_helpers.format_context_row(row) for row in scope_rows)
+        special_instruction = (
+            "### Special instruction\n\n"
+            "You are jumping into this conversation uninvited. Do NOT directly address or reply to the message that triggered you — "
+            "instead, read the room and chime in naturally. You might share a reaction, drop an opinion, make an observation, ask a question, "
+            "or just say something relevant to what's been going on. Keep it casual and brief, like someone who just walked in and has something to add."
+        )
+
         context_note = (
-            f"{context_note}\n\n"
-            "## Latest Discord messages\n\n"
+            f"{context_note}"
+            f"{'\n\n' + special_instruction if is_convo_bomb else ''}"
+            "\n\n## Latest Discord messages\n\n"
             "These are the most recent messages in the conversation. You should use them to have a rough idea of the conversation topic and flow, but don't reply to them directly.\n\n"
             "Format: msg_id id (reply to id) - username: message\n\n"
             "CRITICAL: Do not let 'username: ' leak into your response, it's only part of the context formatting.\n\n"
             f"{context_rows}"
-        )
-
-    if is_convo_bomb:
-        context_note = (
-            f"{context_note}\n\n"
-            "## Special instruction\n\n"
-            "You are jumping into this conversation uninvited. Do NOT directly address or reply to the message that triggered you — "
-            "instead, read the room and chime in naturally. You might share a reaction, drop an opinion, make an observation, ask a question, "
-            "or just say something relevant to what's been going on. Keep it casual and brief, like someone who just walked in and has something to add."
         )
 
     return history, context_note
